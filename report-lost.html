@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · Report Lost Item</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container container--wide">
+        <header class="app-header app-header--subpage" aria-label="Top">
+            <nav class="app-header__nav" aria-label="Main">
+                <a href="dashboard.html"><span class="brand">College Cache</span></a>
+                <a href="search.html">Search</a>
+                <a href="report-lost.html">Report Lost</a>
+                <a href="report-found.html">Report Found</a>
+                <a href="my-reports.html">My Reports</a>
+            </nav>
+        </header>
+
+        <h1>Report a Lost Item</h1>
+        <p class="intro intro--tight">Tell us what's missing. Don't worry about exposing exact details — your report stays public-only until ownership is verified.</p>
+
+        <form id="lostForm" novalidate>
+            <div class="input-group">
+                <label for="title">Item title</label>
+                <input type="text" id="title" name="title" placeholder="e.g. Black North Face backpack" required>
+            </div>
+
+            <div class="input-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="4" placeholder="What does it look like? Any non-identifying details that help others recognize it."></textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="category">Category</label>
+                <select id="category" name="category" required></select>
+            </div>
+
+            <div class="input-group">
+                <label for="general_location">Last-known general location</label>
+                <select id="general_location" name="general_location" required></select>
+            </div>
+
+            <div class="input-group">
+                <label for="radius">Optional radius / general area</label>
+                <input type="text" id="radius" name="radius" placeholder="e.g. 2nd floor, near the entrance">
+            </div>
+
+            <div class="input-group">
+                <label for="item_time">Approximate time lost</label>
+                <input type="datetime-local" id="item_time" name="item_time">
+            </div>
+
+            <div class="input-group">
+                <label for="image_url">Optional photo URL</label>
+                <input type="url" id="image_url" name="image_url" placeholder="https://...">
+            </div>
+
+            <p id="msg" class="message" role="status" aria-live="polite"></p>
+            <button type="submit">Submit lost report</button>
+        </form>
+
+        <p class="bottom-link"><a href="dashboard.html">Back to dashboard</a></p>
+    </div>
+
+    <script src="js/cc-utils.js"></script>
+    <script>
+        (function () {
+            var uid = CC.requireLogin();
+            if (!uid) return;
+
+            CC.populateSelect(document.getElementById("category"), CC.CATEGORIES, "Select a category");
+            CC.populateSelect(document.getElementById("general_location"), CC.LOCATIONS, "Select a general area");
+
+            var msg = document.getElementById("msg");
+            document.getElementById("lostForm").addEventListener("submit", function (e) {
+                e.preventDefault();
+                msg.textContent = "";
+                msg.className = "message";
+
+                var body = {
+                    user_id: uid,
+                    type: "LOST",
+                    status: "SEARCHING",
+                    title: document.getElementById("title").value.trim(),
+                    description: document.getElementById("description").value.trim(),
+                    category: document.getElementById("category").value,
+                    general_location: document.getElementById("general_location").value,
+                    radius: document.getElementById("radius").value.trim(),
+                    item_time: document.getElementById("item_time").value || null,
+                    image_url: document.getElementById("image_url").value.trim()
+                };
+
+                if (!body.title || !body.category || !body.general_location) {
+                    msg.textContent = "Please fill the required fields.";
+                    msg.classList.add("message--error");
+                    return;
+                }
+
+                fetch("/createItemReport", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                })
+                    .then(function (r) {
+                        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "Failed"); });
+                        return r.json();
+                    })
+                    .then(function (item) {
+                        msg.textContent = "Lost item report submitted. Redirecting…";
+                        msg.classList.add("message--success");
+                        setTimeout(function () {
+                            window.location.href = "item-detail.html?id=" + encodeURIComponent(item._id);
+                        }, 700);
+                    })
+                    .catch(function (err) {
+                        msg.textContent = (err && err.message) || "Could not submit report.";
+                        msg.classList.add("message--error");
+                    });
+            });
+        })();
+    </script>
+</body>
+</html>

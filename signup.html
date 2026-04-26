@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · Sign Up</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1><span class="brand">College Cache</span></h1>
+        <p class="intro">Create an account with your school email (must end in <code>.edu</code>).</p>
+        <form id="signupForm" action="#" method="post" novalidate>
+            <div class="input-group">
+                <label for="firstName">First name</label>
+                <input type="text" id="firstName" name="firstName" autocomplete="given-name" required>
+            </div>
+            <div class="input-group">
+                <label for="lastName">Last name</label>
+                <input type="text" id="lastName" name="lastName" autocomplete="family-name" required>
+            </div>
+            <div class="input-group">
+                <label for="email">University email</label>
+                <input type="email" id="email" name="email" placeholder="you@school.edu" autocomplete="email" required>
+            </div>
+            <div class="input-group">
+                <label for="role">Role</label>
+                <select id="role" name="role" required>
+                    <option value="STUDENT">Student</option>
+                    <option value="FACULTY">Faculty</option>
+                    <option value="STAFF">Staff</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="campus">Campus (optional)</label>
+                <input type="text" id="campus" name="campus" placeholder="e.g. Uptown, Downtown">
+            </div>
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" autocomplete="new-password" required>
+            </div>
+            <p id="signupMessage" class="message" role="status" aria-live="polite"></p>
+            <button type="submit">Create account</button>
+        </form>
+        <p class="bottom-link">Have an account? <a href="login.html">Log in</a></p>
+    </div>
+    <script>
+        (function () {
+            var form = document.getElementById("signupForm");
+            var messageEl = document.getElementById("signupMessage");
+            var EDU = /^[^\s@]+@[^\s@]+\.edu$/i;
+
+            form.addEventListener("submit", function (e) {
+                e.preventDefault();
+                messageEl.textContent = "";
+                messageEl.className = "message";
+
+                var firstName = document.getElementById("firstName").value.trim();
+                var lastName = document.getElementById("lastName").value.trim();
+                var email = document.getElementById("email").value.trim();
+                var role = document.getElementById("role").value;
+                var campus = document.getElementById("campus").value.trim();
+                var password = document.getElementById("password").value;
+
+                if (!EDU.test(email)) {
+                    messageEl.textContent = "Email must be a university (.edu) address.";
+                    messageEl.classList.add("message--error");
+                    return;
+                }
+
+                fetch("/signup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: email,
+                        password: password,
+                        role: role,
+                        campus: campus
+                    })
+                })
+                    .then(function (res) {
+                        if (res.status === 409) throw new Error("An account with that email already exists.");
+                        if (!res.ok) return res.text().then(function (t) { throw new Error(t || "Sign-up failed."); });
+                        return res.json();
+                    })
+                    .then(function () {
+                        messageEl.textContent = "Account created. Redirecting to log in…";
+                        messageEl.classList.add("message--success");
+                        setTimeout(function () { window.location.href = "login.html"; }, 900);
+                    })
+                    .catch(function (err) {
+                        messageEl.textContent = (err && err.message) || "Error signing up.";
+                        messageEl.classList.add("message--error");
+                    });
+            });
+        })();
+    </script>
+</body>
+</html>

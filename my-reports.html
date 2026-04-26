@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · My Reports</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container container--wide">
+        <header class="app-header app-header--subpage" aria-label="Top">
+            <nav class="app-header__nav" aria-label="Main">
+                <a href="dashboard.html"><span class="brand">College Cache</span></a>
+                <a href="search.html">Search</a>
+                <a href="report-lost.html">Report Lost</a>
+                <a href="report-found.html">Report Found</a>
+                <a href="my-reports.html">My Reports</a>
+            </nav>
+        </header>
+
+        <h1>My Reports</h1>
+        <p id="profileLine" class="intro intro--tight"></p>
+
+        <section class="dashboard-section">
+            <h2>My item reports</h2>
+            <div id="myReportsGrid" class="card-grid"></div>
+            <p id="myReportsEmpty" class="empty-state" hidden>You haven't submitted any reports yet.</p>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>My claims</h2>
+            <div class="table-wrap">
+                <table class="data-table" id="claimsTable">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                            <th>Submitted</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="claimsBody"></tbody>
+                </table>
+            </div>
+            <p id="claimsEmpty" class="empty-state" hidden>You haven't submitted any claims yet.</p>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>Notifications</h2>
+            <ul id="notifList" class="notif-list"></ul>
+            <p id="notifEmpty" class="empty-state" hidden>No notifications yet.</p>
+        </section>
+    </div>
+
+    <script src="js/cc-utils.js"></script>
+    <script>
+        (function () {
+            var uid = CC.requireLogin();
+            if (!uid) return;
+
+            var name = localStorage.getItem("loggedInName") || "";
+            var email = localStorage.getItem("loggedInEmail") || "";
+            var role = localStorage.getItem("loggedInRole") || "";
+            document.getElementById("profileLine").textContent =
+                (name ? name + " · " : "") + email + (role ? " · " + role : "");
+
+            // My reports
+            var myGrid = document.getElementById("myReportsGrid");
+            var myEmpty = document.getElementById("myReportsEmpty");
+            fetch("/getMyReports?user_id=" + encodeURIComponent(uid))
+                .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                .then(function (items) {
+                    if (!items.length) { myEmpty.hidden = false; return; }
+                    items.forEach(function (it) { myGrid.appendChild(CC.itemCard(it)); });
+                })
+                .catch(function () { myEmpty.hidden = false; myEmpty.textContent = "Could not load reports."; });
+
+            // My claims
+            var claimsBody = document.getElementById("claimsBody");
+            var claimsEmpty = document.getElementById("claimsEmpty");
+            fetch("/getMyClaims?user_id=" + encodeURIComponent(uid))
+                .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                .then(function (claims) {
+                    if (!claims.length) { claimsEmpty.hidden = false; return; }
+                    claims.forEach(function (c) {
+                        var tr = document.createElement("tr");
+                        var item = c.item_report_id || {};
+
+                        var t1 = document.createElement("td");
+                        t1.textContent = item.title || "(item)";
+                        tr.appendChild(t1);
+
+                        var t2 = document.createElement("td");
+                        t2.textContent = item.type || "—";
+                        tr.appendChild(t2);
+
+                        var t3 = document.createElement("td");
+                        t3.textContent = c.status || "—";
+                        tr.appendChild(t3);
+
+                        var t4 = document.createElement("td");
+                        t4.textContent = String(c.confidence_score || 0);
+                        tr.appendChild(t4);
+
+                        var t5 = document.createElement("td");
+                        t5.textContent = CC.fmtDate(c.createdAt);
+                        tr.appendChild(t5);
+
+                        var t6 = document.createElement("td");
+                        var a = document.createElement("a");
+                        a.href = "claim.html?claim_id=" + encodeURIComponent(c._id);
+                        a.textContent = "View";
+                        a.style.color = "#48b864";
+                        t6.appendChild(a);
+                        tr.appendChild(t6);
+
+                        claimsBody.appendChild(tr);
+                    });
+                })
+                .catch(function () { claimsEmpty.hidden = false; claimsEmpty.textContent = "Could not load claims."; });
+
+            // Notifications
+            var notifList = document.getElementById("notifList");
+            var notifEmpty = document.getElementById("notifEmpty");
+            fetch("/getNotifications?user_id=" + encodeURIComponent(uid))
+                .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                .then(function (list) {
+                    if (!list.length) { notifEmpty.hidden = false; return; }
+                    list.forEach(function (n) {
+                        var li = document.createElement("li");
+                        if (!n.read_status) li.classList.add("is-unread");
+                        var msg = document.createElement("div");
+                        msg.textContent = n.message;
+                        var meta = document.createElement("small");
+                        meta.textContent = (n.type || "INFO") + " · " + CC.fmtDate(n.createdAt);
+                        li.appendChild(msg);
+                        li.appendChild(meta);
+                        if (n.item_report_id) {
+                            var link = document.createElement("a");
+                            link.href = "item-detail.html?id=" + encodeURIComponent(n.item_report_id);
+                            link.textContent = "View item";
+                            link.style.color = "#48b864";
+                            link.style.fontSize = "12px";
+                            li.appendChild(link);
+                        }
+                        notifList.appendChild(li);
+                    });
+                })
+                .catch(function () { notifEmpty.hidden = false; notifEmpty.textContent = "Could not load notifications."; });
+        })();
+    </script>
+</body>
+</html>

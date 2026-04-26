@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · Item Detail</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container container--wide">
+        <header class="app-header app-header--subpage" aria-label="Top">
+            <nav class="app-header__nav" aria-label="Main">
+                <a href="dashboard.html"><span class="brand">College Cache</span></a>
+                <a href="search.html">Search</a>
+                <a href="report-lost.html">Report Lost</a>
+                <a href="report-found.html">Report Found</a>
+                <a href="my-reports.html">My Reports</a>
+            </nav>
+        </header>
+
+        <p id="banner" class="banner" hidden></p>
+
+        <h1 id="title">Item</h1>
+        <div id="badgeRow" class="item-card__row" style="margin-bottom:14px;"></div>
+
+        <section class="detail-section">
+            <h2 class="subhead">Public details</h2>
+            <dl class="detail-grid">
+                <dt>Type</dt><dd id="d-type">—</dd>
+                <dt>Status</dt><dd id="d-status">—</dd>
+                <dt>Category</dt><dd id="d-category">—</dd>
+                <dt>General area</dt><dd id="d-general">—</dd>
+                <dt>Area / radius</dt><dd id="d-radius">—</dd>
+                <dt>Approx. time</dt><dd id="d-time">—</dd>
+                <dt>Posted</dt><dd id="d-posted">—</dd>
+                <dt>Drop-off method</dt><dd id="d-dropoff">—</dd>
+            </dl>
+        </section>
+
+        <section class="detail-section">
+            <h2 class="subhead">Description</h2>
+            <p id="d-desc" style="color:#d0d0d0;font-size:13px;line-height:1.5;">—</p>
+
+            <div id="imageWrap" style="margin-top:12px;"></div>
+        </section>
+
+        <section class="detail-section" id="sensitiveSection">
+            <h2 class="subhead">Sensitive details</h2>
+            <p id="sensitiveLocked" class="empty-state">
+                Hidden until ownership is verified. Submit a claim to begin verification.
+            </p>
+            <dl class="detail-grid" id="sensitiveOpen" hidden>
+                <dt>Exact location</dt><dd id="d-exact">—</dd>
+                <dt>Pickup instructions</dt><dd id="d-pickup">—</dd>
+            </dl>
+        </section>
+
+        <section class="detail-section">
+            <div class="btn-row">
+                <a id="btnClaim" class="btn-primary" href="#" hidden>Claim this item</a>
+                <a id="btnIFound" class="btn-primary" href="#" hidden>I found this</a>
+                <button type="button" id="btnRetrieved" class="btn-secondary" hidden>Mark as retrieved</button>
+                <a class="btn-secondary" href="dashboard.html">Back to dashboard</a>
+            </div>
+        </section>
+
+        <section class="detail-section" id="claimsSection" hidden>
+            <h2 class="subhead">Claims on this item</h2>
+            <p class="intro intro--tight">As the reporter, you can approve or deny pending claims.</p>
+            <div id="claimsList"></div>
+            <p id="claimsEmpty" class="empty-state" hidden>No claims yet.</p>
+        </section>
+    </div>
+
+    <script src="js/cc-utils.js"></script>
+    <script>
+        (function () {
+            var uid = CC.requireLogin();
+            if (!uid) return;
+
+            var params = new URLSearchParams(window.location.search);
+            var itemId = params.get("id");
+            var banner = document.getElementById("banner");
+
+            if (!itemId) {
+                CC.setBanner(banner, "error", "Missing item id.");
+                return;
+            }
+
+            function setText(id, val) {
+                document.getElementById(id).textContent = val || "—";
+            }
+
+            function loadItem() {
+                fetch("/getItemReport?id=" + encodeURIComponent(itemId) + "&user_id=" + encodeURIComponent(uid))
+                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function (item) {
+                        document.title = "College Cache · " + (item.title || "Item");
+                        document.getElementById("title").textContent = item.title || "(untitled)";
+
+                        var br = document.getElementById("badgeRow");
+                        br.innerHTML = "";
+                        br.appendChild(CC.typeBadge(item.type));
+                        br.appendChild(CC.statusBadge(item.status));
+
+                        setText("d-type", item.type === "LOST" ? "Lost" : "Found");
+                        setText("d-status", (item.status || "").replace("_", " "));
+                        setText("d-category", item.category);
+                        setText("d-general", item.general_location);
+                        setText("d-radius", item.radius);
+                        setText("d-time", CC.fmtDate(item.item_time));
+                        setText("d-posted", CC.fmtDate(item.createdAt));
+                        var dropMap = {
+                            ORIGINAL_LOCATION: "Left at original location",
+                            CAMPUS_OFFICE: "Dropped at campus office",
+                            LOCKER: "Stored in locker / desk",
+                            UNKNOWN: "—"
+                        };
+                        setText("d-dropoff", item.type === "FOUND" ? (dropMap[item.drop_off_method] || item.drop_off_method) : "—");
+                        setText("d-desc", item.description);
+
+                        var imageWrap = document.getElementById("imageWrap");
+                        imageWrap.innerHTML = "";
+                        if (item.image_url) {
+                            var img = document.createElement("img");
+                            img.src = item.image_url;
+                            img.alt = "Item photo";
+                            img.className = "image-thumb";
+                            imageWrap.appendChild(img);
+                        } else if (item.type === "FOUND") {
+                            var ph = document.createElement("div");
+                            ph.className = "image-placeholder";
+                            ph.textContent = "Photo hidden until ownership is verified.";
+                            imageWrap.appendChild(ph);
+                        }
+
+                        // Sensitive reveal
+                        var locked = document.getElementById("sensitiveLocked");
+                        var openEl = document.getElementById("sensitiveOpen");
+                        var sensSection = document.getElementById("sensitiveSection");
+                        if (item.type !== "FOUND") {
+                            sensSection.hidden = true;
+                        } else if (item.exact_location !== undefined || item.pickup_instructions !== undefined) {
+                            locked.hidden = true;
+                            openEl.hidden = false;
+                            setText("d-exact", item.exact_location);
+                            setText("d-pickup", item.pickup_instructions);
+                        }
+
+                        var isOwner = String(item.user_id) === String(uid);
+
+                        // Buttons
+                        var btnClaim = document.getElementById("btnClaim");
+                        var btnIFound = document.getElementById("btnIFound");
+                        var btnRetrieved = document.getElementById("btnRetrieved");
+
+                        if (item.type === "FOUND" && !isOwner && item.status !== "RESOLVED") {
+                            btnClaim.hidden = false;
+                            btnClaim.href = "claim.html?item_id=" + encodeURIComponent(item._id);
+                        }
+                        if (item.type === "LOST" && !isOwner && item.status !== "RESOLVED") {
+                            btnIFound.hidden = false;
+                            btnIFound.href = "report-found.html";
+                        }
+                        if (isOwner && item.status !== "RESOLVED") {
+                            btnRetrieved.hidden = false;
+                            btnRetrieved.addEventListener("click", function () {
+                                if (!confirm("Mark this item as retrieved?")) return;
+                                fetch("/markRetrieved", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ id: item._id, user_id: uid })
+                                })
+                                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                                    .then(function () {
+                                        CC.setBanner(banner, "success", "Item marked as retrieved.");
+                                        loadItem();
+                                    })
+                                    .catch(function () {
+                                        CC.setBanner(banner, "error", "Could not update status.");
+                                    });
+                            });
+                        }
+
+                        if (isOwner) {
+                            loadClaimsForItem();
+                        }
+                    })
+                    .catch(function () {
+                        CC.setBanner(banner, "error", "Could not load item.");
+                    });
+            }
+
+            function loadClaimsForItem() {
+                var section = document.getElementById("claimsSection");
+                var list = document.getElementById("claimsList");
+                var empty = document.getElementById("claimsEmpty");
+                section.hidden = false;
+                list.innerHTML = "";
+                empty.hidden = true;
+
+                fetch("/getClaimsForItem?item_id=" + encodeURIComponent(itemId))
+                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function (claims) {
+                        if (!claims.length) { empty.hidden = false; return; }
+                        claims.forEach(function (c) {
+                            list.appendChild(renderClaimCard(c));
+                        });
+                    })
+                    .catch(function () {
+                        empty.hidden = false;
+                        empty.textContent = "Could not load claims.";
+                    });
+            }
+
+            function renderClaimCard(c) {
+                var card = document.createElement("div");
+                card.className = "item-card";
+                card.style.cursor = "default";
+
+                var row = document.createElement("div");
+                row.className = "item-card__row";
+                var statusSpan = document.createElement("span");
+                statusSpan.className = "badge";
+                if (c.status === "APPROVED") statusSpan.classList.add("badge--status-active");
+                else if (c.status === "PENDING") statusSpan.classList.add("badge--status-pending");
+                else if (c.status === "REJECTED") statusSpan.classList.add("badge--status-resolved");
+                statusSpan.textContent = c.status;
+                row.appendChild(statusSpan);
+
+                var scoreSpan = document.createElement("span");
+                scoreSpan.className = "badge";
+                scoreSpan.textContent = "Score " + (c.confidence_score || 0);
+                row.appendChild(scoreSpan);
+                card.appendChild(row);
+
+                var who = document.createElement("div");
+                who.className = "item-card__meta";
+                var u = c.claimant_user_id || {};
+                who.textContent = ((u.firstName || "") + " " + (u.lastName || "")).trim() + (u.email ? " · " + u.email : "");
+                card.appendChild(who);
+
+                var bar = document.createElement("div");
+                bar.className = "confidence-bar";
+                var fill = document.createElement("div");
+                fill.className = "confidence-bar__fill";
+                fill.style.width = (c.confidence_score || 0) + "%";
+                bar.appendChild(fill);
+                card.appendChild(bar);
+
+                var details = document.createElement("dl");
+                details.className = "detail-grid";
+                appendKV(details, "Identifying features", c.identifying_features);
+                appendKV(details, "Brand / model", c.brand_model);
+                appendKV(details, "Contents", c.contents);
+                appendKV(details, "Approx. loss time", CC.fmtDate(c.approx_loss_time));
+                appendKV(details, "Additional proof", c.additional_proof);
+                card.appendChild(details);
+
+                if (c.status === "PENDING") {
+                    var actionRow = document.createElement("div");
+                    actionRow.className = "btn-row";
+                    var ok = document.createElement("button");
+                    ok.type = "button";
+                    ok.className = "btn-primary";
+                    ok.textContent = "Approve claim";
+                    ok.addEventListener("click", function () { decideClaim(c._id, "APPROVED"); });
+                    var no = document.createElement("button");
+                    no.type = "button";
+                    no.className = "btn-secondary btn-danger";
+                    no.textContent = "Deny claim";
+                    no.addEventListener("click", function () { decideClaim(c._id, "REJECTED"); });
+                    actionRow.appendChild(ok);
+                    actionRow.appendChild(no);
+                    card.appendChild(actionRow);
+                }
+
+                return card;
+            }
+
+            function appendKV(dl, key, val) {
+                if (!val) return;
+                var dt = document.createElement("dt"); dt.textContent = key;
+                var dd = document.createElement("dd"); dd.textContent = val;
+                dl.appendChild(dt); dl.appendChild(dd);
+            }
+
+            function decideClaim(id, decision) {
+                fetch("/decideClaim", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: id, decision: decision })
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function () {
+                        CC.setBanner(banner, "success", decision === "APPROVED" ? "Claim approved." : "Claim denied.");
+                        loadItem();
+                    })
+                    .catch(function () {
+                        CC.setBanner(banner, "error", "Could not update claim.");
+                    });
+            }
+
+            loadItem();
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container container--wide" id="main">
+        <header class="app-header" aria-label="Top">
+            <nav class="app-header__nav" aria-label="Main">
+                <a href="dashboard.html"><span class="brand">College Cache</span></a>
+                <a href="search.html">Search</a>
+                <a href="report-lost.html">Report Lost</a>
+                <a href="report-found.html">Report Found</a>
+                <a href="my-reports.html">My Reports</a>
+            </nav>
+            <button type="button" class="btn-signout app-header__signout" id="btnSignOut">Sign out</button>
+        </header>
+
+        <p id="welcomeMsg" class="intro intro--tight"></p>
+
+        <section class="dashboard-section">
+            <h2>Active reports on campus</h2>
+            <div class="tabs" role="tablist" aria-label="Filter items">
+                <button type="button" class="is-active" data-tab="ALL" role="tab" aria-selected="true">All Items</button>
+                <button type="button" data-tab="LOST" role="tab" aria-selected="false">Lost Items</button>
+                <button type="button" data-tab="FOUND" role="tab" aria-selected="false">Found Items</button>
+            </div>
+
+            <p id="loadError" class="message message--error" role="status" hidden></p>
+
+            <div id="cardGrid" class="card-grid"></div>
+            <p id="emptyState" class="empty-state" hidden>No reports yet. Be the first to submit one.</p>
+
+            <div class="btn-row">
+                <a class="btn-primary" href="report-lost.html">Report a lost item</a>
+                <a class="btn-secondary" href="report-found.html">Report a found item</a>
+                <a class="btn-secondary" href="search.html">Search &amp; filter</a>
+            </div>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>Recent notifications</h2>
+            <ul id="notifList" class="notif-list"></ul>
+            <p id="notifEmpty" class="empty-state" hidden>You're all caught up.</p>
+        </section>
+    </div>
+
+    <script src="js/cc-utils.js"></script>
+    <script>
+        (function () {
+            var uid = localStorage.getItem("loggedInUser");
+            if (!uid) { window.location.replace("login.html"); return; }
+
+            var name = localStorage.getItem("loggedInName") || localStorage.getItem("loggedInEmail") || "";
+            document.getElementById("welcomeMsg").textContent = name ? ("Welcome back, " + name + ".") : "Welcome back.";
+
+            document.getElementById("btnSignOut").addEventListener("click", function (e) {
+                e.preventDefault();
+                localStorage.clear();
+                window.location.href = "login.html";
+            });
+
+            var grid = document.getElementById("cardGrid");
+            var empty = document.getElementById("emptyState");
+            var errEl = document.getElementById("loadError");
+
+            var currentTab = "ALL";
+
+            function loadItems() {
+                grid.innerHTML = "";
+                empty.hidden = true;
+                errEl.hidden = true;
+
+                var url = "/getItemReports";
+                if (currentTab === "LOST" || currentTab === "FOUND") {
+                    url += "?type=" + encodeURIComponent(currentTab);
+                }
+                fetch(url)
+                    .then(function (res) {
+                        if (!res.ok) throw new Error();
+                        return res.json();
+                    })
+                    .then(function (items) {
+                        if (!items.length) { empty.hidden = false; return; }
+                        items.forEach(function (it) {
+                            grid.appendChild(CC.itemCard(it));
+                        });
+                    })
+                    .catch(function () {
+                        errEl.hidden = false;
+                        errEl.textContent = "Could not load reports.";
+                    });
+            }
+
+            var tabBtns = document.querySelectorAll(".tabs button");
+            tabBtns.forEach(function (b) {
+                b.addEventListener("click", function () {
+                    tabBtns.forEach(function (x) { x.classList.remove("is-active"); x.setAttribute("aria-selected", "false"); });
+                    b.classList.add("is-active");
+                    b.setAttribute("aria-selected", "true");
+                    currentTab = b.getAttribute("data-tab");
+                    loadItems();
+                });
+            });
+
+            loadItems();
+
+            // Notifications
+            var notifList = document.getElementById("notifList");
+            var notifEmpty = document.getElementById("notifEmpty");
+            fetch("/getNotifications?user_id=" + encodeURIComponent(uid))
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (list) {
+                    if (!list || !list.length) { notifEmpty.hidden = false; return; }
+                    list.slice(0, 8).forEach(function (n) {
+                        var li = document.createElement("li");
+                        if (!n.read_status) li.classList.add("is-unread");
+                        var msg = document.createElement("div");
+                        msg.textContent = n.message;
+                        var meta = document.createElement("small");
+                        meta.textContent = (n.type || "INFO") + " · " + CC.fmtDate(n.createdAt);
+                        li.appendChild(msg);
+                        li.appendChild(meta);
+                        notifList.appendChild(li);
+                    });
+                })
+                .catch(function () { notifEmpty.hidden = false; });
+        })();
+    </script>
+</body>
+</html>

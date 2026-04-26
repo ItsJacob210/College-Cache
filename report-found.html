@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Cache · Report Found Item</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container container--wide">
+        <header class="app-header app-header--subpage" aria-label="Top">
+            <nav class="app-header__nav" aria-label="Main">
+                <a href="dashboard.html"><span class="brand">College Cache</span></a>
+                <a href="search.html">Search</a>
+                <a href="report-lost.html">Report Lost</a>
+                <a href="report-found.html">Report Found</a>
+                <a href="my-reports.html">My Reports</a>
+            </nav>
+        </header>
+
+        <h1>Report a Found Item</h1>
+        <p class="intro intro--tight">
+            Thanks for helping return an item. You don't have to wait or hold the item — leave it where it is, or
+            drop it at a campus office. Sensitive details (exact location, photos, pickup instructions) stay hidden
+            until ownership is verified.
+        </p>
+
+        <form id="foundForm" novalidate>
+            <div class="input-group">
+                <label for="title">Item title (kept generic is fine)</label>
+                <input type="text" id="title" name="title" placeholder="e.g. Black backpack" required>
+            </div>
+
+            <div class="input-group">
+                <label for="description">Partial description (avoid identifying details)</label>
+                <textarea id="description" name="description" rows="3" placeholder="Color, brand only if obvious, condition. Leave specific identifiers out."></textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="category">Category</label>
+                <select id="category" name="category" required></select>
+            </div>
+
+            <div class="input-group">
+                <label for="general_location">General found location (public)</label>
+                <select id="general_location" name="general_location" required></select>
+            </div>
+
+            <div class="input-group">
+                <label for="exact_location">Exact found location (hidden until claim is verified)</label>
+                <input type="text" id="exact_location" name="exact_location" placeholder="e.g. Library, 2nd floor study room B, on charging desk">
+            </div>
+
+            <div class="input-group">
+                <label for="item_time">Approximate time found</label>
+                <input type="datetime-local" id="item_time" name="item_time">
+            </div>
+
+            <div class="input-group">
+                <label for="drop_off_method">What did you do with the item?</label>
+                <select id="drop_off_method" name="drop_off_method" required>
+                    <option value="ORIGINAL_LOCATION">Left it at the original location</option>
+                    <option value="CAMPUS_OFFICE">Dropped it at a campus office</option>
+                    <option value="LOCKER">Stored in a locker / desk</option>
+                    <option value="UNKNOWN">Unspecified</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="pickup_instructions">Pickup instructions (hidden until verified)</label>
+                <textarea id="pickup_instructions" name="pickup_instructions" rows="3" placeholder="e.g. Drop-off at Campus Safety, Building A Lobby. Open Mon–Fri 8a–6p. Ask for 'lost & found'."></textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="image_url">Optional photo URL (hidden / blurred publicly)</label>
+                <input type="url" id="image_url" name="image_url" placeholder="https://...">
+            </div>
+
+            <p id="msg" class="message" role="status" aria-live="polite"></p>
+            <button type="submit">Submit found report</button>
+        </form>
+
+        <p class="bottom-link"><a href="dashboard.html">Back to dashboard</a></p>
+    </div>
+
+    <script src="js/cc-utils.js"></script>
+    <script>
+        (function () {
+            var uid = CC.requireLogin();
+            if (!uid) return;
+
+            CC.populateSelect(document.getElementById("category"), CC.CATEGORIES, "Select a category");
+            CC.populateSelect(document.getElementById("general_location"), CC.LOCATIONS, "Select a general area");
+
+            var msg = document.getElementById("msg");
+            document.getElementById("foundForm").addEventListener("submit", function (e) {
+                e.preventDefault();
+                msg.textContent = "";
+                msg.className = "message";
+
+                var body = {
+                    user_id: uid,
+                    type: "FOUND",
+                    status: "ACTIVE",
+                    title: document.getElementById("title").value.trim(),
+                    description: document.getElementById("description").value.trim(),
+                    category: document.getElementById("category").value,
+                    general_location: document.getElementById("general_location").value,
+                    exact_location: document.getElementById("exact_location").value.trim(),
+                    item_time: document.getElementById("item_time").value || null,
+                    drop_off_method: document.getElementById("drop_off_method").value,
+                    pickup_instructions: document.getElementById("pickup_instructions").value.trim(),
+                    image_url: document.getElementById("image_url").value.trim()
+                };
+
+                if (!body.title || !body.category || !body.general_location) {
+                    msg.textContent = "Please fill the required fields.";
+                    msg.classList.add("message--error");
+                    return;
+                }
+
+                fetch("/createItemReport", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                })
+                    .then(function (r) {
+                        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "Failed"); });
+                        return r.json();
+                    })
+                    .then(function (item) {
+                        msg.textContent = "Found item report submitted. Redirecting…";
+                        msg.classList.add("message--success");
+                        setTimeout(function () {
+                            window.location.href = "item-detail.html?id=" + encodeURIComponent(item._id);
+                        }, 700);
+                    })
+                    .catch(function (err) {
+                        msg.textContent = (err && err.message) || "Could not submit report.";
+                        msg.classList.add("message--error");
+                    });
+            });
+        })();
+    </script>
+</body>
+</html>
